@@ -102,11 +102,11 @@ static bool IsSameDay(time_t t1, time_t t2);
 
 static void FixPath(std::string &path);
 static void TrimLogConfig(std::string &str, char ignore = '\0');
-static void ParseConfig(std::string file, std::map<std::string, std::map<std::string, std::string> > & outConfig);
+static void ParseConfig(const std::string& file, std::map<std::string, std::map<std::string, std::string> > & outConfig);
 
 
-static bool IsDirectory(std::string path);
-static bool CreateRecursionDir(std::string path);
+static bool IsDirectory(const std::string& path);
+static bool CreateRecursionDir(const std::string& path);
 void GetProcessInfo(std::string &name, std::string &pid);
 static void ShowColorText(const char *text, int level = LOG_LEVEL_DEBUG);
 
@@ -449,12 +449,12 @@ public:
 		int beginpos = ftell(m_file);
 		fseek(m_file, 0, SEEK_END);
 		int endpos = ftell(m_file);
-		fseek(m_file, 0, SEEK_SET);
 		int filelen = endpos - beginpos;
 		if (filelen > 10*1024*1024 || filelen <= 0)
 		{
 			return content;
 		}
+		fseek(m_file, 0, SEEK_SET);
 		content.resize(filelen+10);
 		if (fread(&content[0], 1, filelen, m_file) != (size_t)filelen)
 		{
@@ -514,11 +514,12 @@ public:
 			"#path=./log/\n"
 			"#level=DEBUG\n"
 			"#display=true\n";
+            "#monthdir=false\n";
 	}
 
 
 	//! 读取配置文件并覆写
-	bool Config(std::string cfgPath)
+	bool Config(const std::string& cfgPath)
 	{
 		std::map<std::string, std::map<std::string, std::string> > cfgKey;
 		typedef std::map<std::string, std::map<std::string, std::string> > LogMap;
@@ -591,7 +592,7 @@ public:
 	}
 
 	//! 覆写式创建
-	virtual LoggerId CreateLogger(std::string name,std::string path,int nLevel,bool display, bool monthdir)
+	virtual LoggerId CreateLogger(const std::string& name, std::string path,int nLevel,bool display, bool monthdir)
 	{
 		std::string _tmp;
 		std::string _pid;
@@ -716,7 +717,7 @@ public:
 	}
 
 	//! 查找ID
-	virtual LoggerId FindLogger(std::string name)
+	virtual LoggerId FindLogger(const std::string& name)
 	{
 		std::map<std::string, LoggerId>::iterator iter;
 		iter = m_ids.find(name);
@@ -835,7 +836,8 @@ protected:
 				   <<" path=" <<m_loggers[i]._path
 				   <<" name=" <<m_loggers[i]._name
 				   <<" level=" << m_loggers[i]._level
-				   <<" display=" << m_loggers[i]._display;
+				   <<" display=" << m_loggers[i]._display
+				   <<" monthdir=" << m_loggers[i]._monthdir;
 				PushLog(0, LOG_LEVEL_ALARM, ss.str().c_str());
 			}
 		}
@@ -1052,7 +1054,7 @@ static void TrimLogConfig(std::string &str, char ignore)
 	}
 }
 
-static void ParseConfig(std::string file, std::map<std::string, std::map<std::string, std::string> > & outConfig)
+static void ParseConfig(const std::string& file, std::map<std::string, std::map<std::string, std::string> > & outConfig)
 {
 	//! read file content
 	{
@@ -1110,7 +1112,7 @@ static void ParseConfig(std::string file, std::map<std::string, std::map<std::st
 }
 
 
-bool IsDirectory(std::string path)
+bool IsDirectory(const std::string& path)
 {
 #ifdef WIN32
 	return PathIsDirectoryA(path.c_str()) ? true : false;
@@ -1131,16 +1133,17 @@ bool IsDirectory(std::string path)
 
 
 
-bool CreateRecursionDir(std::string path)
+bool CreateRecursionDir(const std::string& path)
 {
 	if (path.length() == 0) return true;
 	std::string sub;
-	FixPath(path);
+	std::string tmppath=path;
+	FixPath(tmppath);
 
-	std::string::size_type pos = path.find('/');
+	std::string::size_type pos = tmppath.find('/');
 	while (pos != std::string::npos)
 	{
-		std::string cur = path.substr(0, pos-0);
+		std::string cur = tmppath.substr(0, pos-0);
 		if (cur.length() > 0 && !IsDirectory(cur))
 		{
 			bool ret = false;
@@ -1154,7 +1157,7 @@ bool CreateRecursionDir(std::string path)
 				return false;
 			}
 		}
-		pos = path.find('/', pos+1);
+		pos = tmppath.find('/', pos+1);
 	}
 
 	return true;

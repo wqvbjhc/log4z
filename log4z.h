@@ -180,9 +180,9 @@ public:
 	static ILog4zManager * GetInstance();
 
 	//! config
-	virtual bool Config(std::string cfgPath) = 0;
+	virtual bool Config(const std::string& cfgPath) = 0;
 	//! create | write over 
-	virtual LoggerId CreateLogger(std::string name, 
+	virtual LoggerId CreateLogger(const std::string& name, 
 		std::string path="./log/",
 		int nLevel = LOG_LEVEL_DEBUG,
 		bool display = true,
@@ -193,7 +193,7 @@ public:
 	virtual bool Stop() = 0;
 
 	//! find logger. thread safe.
-	virtual LoggerId FindLogger(std::string name) =0;
+	virtual LoggerId FindLogger(const std::string& name) =0;
 
 	//! push log, thread safe.
 	virtual bool PushLog(LoggerId id, int level, const char * log) = 0;
@@ -209,6 +209,9 @@ public:
 	virtual unsigned long long GetStatusWaitingCount() = 0;
 	virtual unsigned int GetStatusActiveLoggers() = 0;
 
+private:
+	ILog4zManager(const ILog4zManager&);
+	ILog4zManager& operator = (ILog4zManager&);
 };
 
 #ifndef _ZSUMMER_END
