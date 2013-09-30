@@ -112,6 +112,9 @@
  *  adjust output file named.
  *  add month directory option.
  *  adjust some detail.
+ *
+ * VERSION 2.3.1 <DATE: 2013.09.18>----jhc
+ * change param "std::string" to "const std::string&"
  */
 
 #pragma once
@@ -161,10 +164,6 @@ enum ENUM_LOG_LEVEL
 #endif
 _ZSUMMER_BEGIN
 _ZSUMMER_LOG4Z_BEGIN
-
-
-
-
 
 
 
