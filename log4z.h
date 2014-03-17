@@ -1,3 +1,12 @@
+/***************************************
+* @file     log4z.h
+* @brief    log4z V2.4.0 更新日期2013.10.09
+* @details  
+* @author   陈吉宏, wqvbjhc@gmail.com
+* @date     2014-02-24
+* @mod      2014-02-24 phata 添加SetLoggerPath接口
+            2014-03-05 phata 与官网同步，add format string method at input log
+****************************************/
 /*
  * Log4z License
  * -----------
@@ -37,11 +46,12 @@
 
 /*
  * AUTHORS:  YaweiZhang <yawei_zhang@foxmail.com>
- * VERSION:  2.3.1
+ * VERSION:  2.4.0
  * PURPOSE:  A lightweight library for error reporting and logging to file and screen .
  * CREATION: 2010.10.4
- * LCHANGE:  2013.09.08
+ * LCHANGE:  2014.03.05
  * LICENSE:  Expat/MIT License, See Copyright Notice at the begin of this file.
+ * Phata: Mod std::string to const char* --2014-1-29
  */
 
 
@@ -108,14 +118,23 @@
  * VERSION 2.2 <DATE: 2013.07.08>
  *	optimized binary stream output view
  * 	support wchar * string.
+ *  
  * VERSION 2.3 <DATE: 2013.08.29>
  *  adjust output file named.
  *  add month directory option.
  *  adjust some detail.
- *
- * VERSION 2.3.1 <DATE: 2013.09.18>----jhc
- * change param "std::string" to "const std::string&"
+ * 
+ * VERSION 2.4 <DATE: 2013.10.07>
+ *  add file limit option
+ *  used precision time in log.
+ *  support runtime update config used configure file.
+ *  fix tls bug in windows xp dll
+ * VERSION 2.5 <DATE: 2014.03.05>
+ *  fix sem_timewait in linux
+ *  add format string method at input log
+ *  
  */
+
 
 #pragma once
 #ifndef _ZSUMMER_LOG4Z_H_
@@ -140,8 +159,36 @@ typedef int LoggerId;
 #define LOG4Z_INVALID_LOGGER_ID -1
 
 //! the main logger id. DO NOT TOUCH
+//! can use this id to set the main logger's attribute.
+//! example:
+//! ILog4zManager::GetInstance()->SetLoggerLevel(LOG4Z_MAIN_LOGGER_ID, LOG_LEVEL_WARN);
+//! ILog4zManager::GetInstance()->SetLoggerDisplay(LOG4Z_MAIN_LOGGER_ID, false);
 #define LOG4Z_MAIN_LOGGER_ID 0
 
+//! the main logger name. DO NOT TOUCH
+//! if you wan't configure the main logger's path:
+//! example
+//! ILog4zManager::GetInstance()->CreateLogger(LOG4Z_MAIN_LOGGER_NAME, "E:\\GitHub");
+#define LOG4Z_MAIN_LOGGER_NAME "Main"
+
+
+ //! -------------------default logger config, can change on this.--------------
+ //! default logger output file.
+#define LOG4Z_DEFAULT_PATH "./log/"
+//! default log filter level
+#define LOG4Z_DEFAULT_LEVEL LOG_LEVEL_DEBUG
+//! default logger display
+#define LOG4Z_DEFAULT_DISPLAY true
+ //! default logger month dir used status
+#define LOG4Z_DEFAULT_MONTHDIR false
+ //! default logger output file limit size, unit M byte.
+#define LOG4Z_DEFAULT_LIMITSIZE 100
+
+//! synchronous or asynchronous display to the screen
+#define LOG4Z_SYNCHRONOUS_DISPLAY true
+
+//! write log to file
+#define LOG4Z_WRITE_TO_FILE true
 
 
 //! LOG Level
@@ -167,6 +214,10 @@ _ZSUMMER_LOG4Z_BEGIN
 
 
 
+
+
+
+
 //! log4z class
 class ILog4zManager
 {
@@ -178,14 +229,15 @@ public:
 	//! log4z Singleton
 	static ILog4zManager * GetInstance();
 
-	//! config
-	virtual bool Config(const std::string& cfgPath) = 0;
+	//! config | config over
+	virtual bool Config(const char* cfgPath) = 0;
 	//! create | write over 
-	virtual LoggerId CreateLogger(const std::string& name, 
-		std::string path="./log/",
-		int nLevel = LOG_LEVEL_DEBUG,
-		bool display = true,
-		bool monthdir = false) = 0;
+	virtual LoggerId CreateLogger(const char* name, 
+		const char* path=LOG4Z_DEFAULT_PATH,
+		int nLevel = LOG4Z_DEFAULT_LEVEL,
+		bool display = LOG4Z_DEFAULT_DISPLAY,
+		bool monthdir = LOG4Z_DEFAULT_MONTHDIR,
+		unsigned int limitsize = LOG4Z_DEFAULT_LIMITSIZE /*million byte*/) = 0;
 
 	//! start & stop.
 	virtual bool Start() = 0;
@@ -200,7 +252,11 @@ public:
 	//! set logger's attribute, thread safe.
 	virtual bool SetLoggerLevel(LoggerId nLoggerID, int nLevel) = 0;
 	virtual bool SetLoggerDisplay(LoggerId nLoggerID, bool enable) = 0;
+	virtual bool SetLoggerPath(LoggerId nLoggerID, const char* path) = 0;
 	virtual bool SetLoggerMonthdir(LoggerId nLoggerID, bool use) = 0;
+	virtual bool SetLoggerLimitSize(LoggerId nLoggerID, unsigned int limitsize) = 0;
+	//! update logger's attribute from config file, thread safe.
+	virtual bool UpdateConfig() = 0;
 
 	//! log4z status statistics, thread safe.
 	virtual unsigned long long GetStatusTotalWriteCount() = 0;
@@ -208,9 +264,6 @@ public:
 	virtual unsigned long long GetStatusWaitingCount() = 0;
 	virtual unsigned int GetStatusActiveLoggers() = 0;
 
-private:
-	ILog4zManager(const ILog4zManager&);
-	ILog4zManager& operator = (ILog4zManager&);
 };
 
 #ifndef _ZSUMMER_END
@@ -233,6 +286,16 @@ extern __thread char g_log4zstreambuf[LOG4Z_LOG_BUF_SIZE];
 #endif
 
 //! base micro.
+#ifdef  _WINDLL
+#define LOG_STREAM(id, level, log)\
+{\
+	char logbuf[LOG4Z_LOG_BUF_SIZE];\
+	zsummer::log4z::CStringStream ss(logbuf, LOG4Z_LOG_BUF_SIZE);\
+	ss << log;\
+	ss << " ( " << __FILE__ << " ) : "  << __LINE__;\
+	zsummer::log4z::ILog4zManager::GetInstance()->PushLog(id, level, logbuf);\
+}
+#else
 #define LOG_STREAM(id, level, log)\
 {\
 	zsummer::log4z::CStringStream ss(g_log4zstreambuf, LOG4Z_LOG_BUF_SIZE);\
@@ -240,6 +303,30 @@ extern __thread char g_log4zstreambuf[LOG4Z_LOG_BUF_SIZE];
 	ss << " ( " << __FILE__ << " ) : "  << __LINE__;\
 	zsummer::log4z::ILog4zManager::GetInstance()->PushLog(id, level, g_log4zstreambuf);\
 }
+#endif
+
+#ifdef WIN32
+#define LOG_FORMART(id, level, logformat, ...) \
+{ \
+	char logbuf[LOG4Z_LOG_BUF_SIZE]; \
+	int ret = _snprintf_s(logbuf, LOG4Z_LOG_BUF_SIZE, _TRUNCATE, logformat, ##__VA_ARGS__); \
+	if (ret >= 0 && ret<LOG4Z_LOG_BUF_SIZE-1) \
+	{\
+		_snprintf_s(logbuf + ret, LOG4Z_LOG_BUF_SIZE - ret, _TRUNCATE, " (%s) : %d", __FILE__, __LINE__);\
+	}\
+	zsummer::log4z::ILog4zManager::GetInstance()->PushLog(id, level, logbuf); \
+ }
+#else
+#define LOG_FORMART(id, level, logformat, ...) \
+{ \
+	int ret = snprintf(g_log4zstreambuf, LOG4Z_LOG_BUF_SIZE,logformat, ##__VA_ARGS__); \
+	if (ret >= 0 && ret < LOG4Z_LOG_BUF_SIZE - 1) \
+	{\
+		snprintf(g_log4zstreambuf + ret, LOG4Z_LOG_BUF_SIZE - ret, " (%s) : %d", __FILE__, __LINE__); \
+	}\
+	zsummer::log4z::ILog4zManager::GetInstance()->PushLog(id, level, g_log4zstreambuf); \
+}
+#endif
 
 //! fast micro
 #define LOG_DEBUG(id, log) LOG_STREAM(id, LOG_LEVEL_DEBUG, log)
@@ -258,9 +345,19 @@ extern __thread char g_log4zstreambuf[LOG4Z_LOG_BUF_SIZE];
 #define LOGF( log ) LOG_FATAL(LOG4Z_MAIN_LOGGER_ID, log )
 
 
-
-
-
+//!format string
+#define LOGFMT_DEBUG(id, fmt, ...)  LOG_FORMART(id, LOG_LEVEL_DEBUG, fmt, ##__VA_ARGS__)
+#define LOGFMT_INFO(id, fmt, ...)  LOG_FORMART(id, LOG_LEVEL_INFO, fmt, ##__VA_ARGS__)
+#define LOGFMT_WARN(id, fmt, ...)  LOG_FORMART(id, LOG_LEVEL_WARN, fmt, ##__VA_ARGS__)
+#define LOGFMT_ERROR(id, fmt, ...)  LOG_FORMART(id, LOG_LEVEL_ERROR, fmt, ##__VA_ARGS__)
+#define LOGFMT_ALARM(id, fmt, ...)  LOG_FORMART(id, LOG_LEVEL_ALARM, fmt, ##__VA_ARGS__)
+#define LOGFMT_FATAL(id, fmt, ...)  LOG_FORMART(id, LOG_LEVEL_FATAL, fmt, ##__VA_ARGS__)
+#define LOGFMTD( fmt, ...) LOGFMT_DEBUG(LOG4Z_MAIN_LOGGER_ID, fmt,  ##__VA_ARGS__)
+#define LOGFMTI( fmt, ...) LOGFMT_INFO(LOG4Z_MAIN_LOGGER_ID, fmt,  ##__VA_ARGS__)
+#define LOGFMTW( fmt, ...) LOGFMT_WARN(LOG4Z_MAIN_LOGGER_ID, fmt,  ##__VA_ARGS__)
+#define LOGFMTE( fmt, ...) LOGFMT_ERROR(LOG4Z_MAIN_LOGGER_ID, fmt,  ##__VA_ARGS__)
+#define LOGFMTA( fmt, ...) LOGFMT_ALARM(LOG4Z_MAIN_LOGGER_ID, fmt,  ##__VA_ARGS__)
+#define LOGFMTF( fmt, ...) LOGFMT_FATAL(LOG4Z_MAIN_LOGGER_ID, fmt,  ##__VA_ARGS__)
 
 
 
@@ -328,8 +425,7 @@ public:
 		}
 	}
 
-	template<class T>
-	inline CStringStream & operator <<(const T * t)
+	inline CStringStream & operator <<(void * t)
 	{	
 #ifdef WIN32
 		if (sizeof(t) == 8)
@@ -352,8 +448,17 @@ public:
 #endif
 		return *this;
 	}
+
 	template<class T>
-	inline CStringStream & operator <<(T * t) {return (*this << (const T*) t);}
+	inline CStringStream & operator <<(const T * t)
+	{	
+		return *this << (void *)t;
+	}
+	template<class T>
+	inline CStringStream & operator <<(T * t) 
+	{
+		return (*this << (void *) t);
+	}
 
 	inline CStringStream & operator <<(bool t)
 	{
